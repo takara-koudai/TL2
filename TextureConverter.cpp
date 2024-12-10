@@ -108,16 +108,41 @@ void TextureConverter::SeparateFilePath(const std::wstring& filePath)
 
 void TextureConverter::SaveDDSTextureToFile()
 {
-	//読み込んだテクスチャをSRGBとして扱う
-	metadata_.format = MakeSRGB(metadata_.format);
-
+	ScratchImage mipChain;
 	HRESULT result;
 
 	//出力ファイル名を設定する
 	std::wstring filePath = directoryPath_ + fileName_ + L".dds";
 
+	//ミップマップ生成
+	result = GenerateMipMaps(sctatchImage_.GetImages(), sctatchImage_.GetImageCount(), sctatchImage_.GetMetadata(), TEX_FILTER_DEFAULT, 0, mipChain);
+	
+	if (SUCCEEDED(result))
+	{
+		//イメージとメタデータをミップマップ版で置き換える
+		sctatchImage_ = std::move(mipChain);
+		metadata_ = sctatchImage_.GetMetadata();
+
+	}
+
+	//圧縮形式に変換
+	ScratchImage converted;
+	result = Compress(sctatchImage_.GetImages(), sctatchImage_.GetImageCount(), metadata_,
+		DXGI_FORMAT_BC7_UNORM_SRGB, TEX_COMPRESS_BC7_QUICK | TEX_COMPRESS_SRGB_OUT |
+		TEX_COMPRESS_PARALLEL, 1.0f, converted);
+	if (SUCCEEDED(result))
+	{
+		sctatchImage_ = std::move(converted);
+		metadata_ = sctatchImage_.GetMetadata();
+	}
+
+	//読み込んだテクスチャをSRGBとして扱う
+	metadata_.format = MakeSRGB(metadata_.format);
+
+
 	//DDSファイル書き出し
-	result = SaveToDDSFile(sctatchImage_.GetImages(), sctatchImage_.GetImageCount(), metadata_,DDS_FLAGS_NONE,filePath.c_str());
+	result = SaveToDDSFile(sctatchImage_.GetImages(), sctatchImage_.GetImageCount(), metadata_, DDS_FLAGS_NONE, filePath.c_str());
+
 
 	assert(SUCCEEDED(result));
 
